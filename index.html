@@ -5,99 +5,186 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>中國變速 × 業績儀表板</title>
 <style>
+  :root { --gap: 6px; --card-bg:#101010; --card-bd:#181818; }
   body { background:#000; color:#ddd; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
   header { padding:8px 12px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center;}
   .stamp { font-size:12px; opacity:.7 }
-  /* 跑馬燈（CSS Animation，非 <marquee>） */
+  select { background:#0c0c0c; color:#ddd; border:1px solid #222; border-radius:6px; padding:6px 8px; }
+
+  /* 跑馬燈 */
   .ticker-wrap { overflow:hidden; white-space:nowrap; border-top:1px solid #222; border-bottom:1px solid #222; }
   .ticker { display:inline-block; padding:8px 0; animation: ticker 30s linear infinite; }
   .ticker:hover { animation-play-state: paused; }
   @keyframes ticker { 0% { transform:translateX(100%);} 100% { transform:translateX(-100%);} }
   .tick-item { margin-right:48px; color:#0f0 }
-  /* 股市板風格格子 */
-  .grid { display:grid; grid-template-columns: 240px 140px 120px 120px 120px 120px 160px; gap:6px; padding:12px;}
-  .cell { padding:8px 10px; background:#101010; border:1px solid #181818; border-radius:6px; }
-  .head { background:#151515; color:#aaa; font-weight:700; }
+
+  /* 區塊 */
+  .section { padding:12px; }
+  .section h2 { font-size:14px; font-weight:700; color:#8aa; margin:0 0 8px; }
+  .wrap { max-height: 46vh; overflow-y: auto; border:1px solid #111; border-radius:8px; padding:6px; } /* 可捲動 */ /* MDN: overflow/overflow-y 控制捲動區域 */ 
+  /* grid 表 */
+  .grid { display:grid; gap:var(--gap); }
+  /* 個別欄位配置 */
+  .grid.agg { grid-template-columns: 120px 220px 140px 110px 110px 110px 200px; }
+  .grid.raw { grid-template-columns: 120px 220px 120px 100px 160px 120px 100px 100px 100px; }
+
+  .cell { padding:8px 10px; background:var(--card-bg); border:1px solid var(--card-bd); border-radius:6px; }
+  .head { background:#151515; color:#aaa; font-weight:700; position:sticky; top:0; z-index:1; }
   .num { text-align:right; font-variant-numeric: tabular-nums; }
-  .green { color:#25d366 } .yellow { color:#ffdd57 } .cyan { color:#5ad } .red { color:#ff5a5a } .white { color:#eee }
-  .blink { animation: blink 1s steps(2, start) 6; }
-  @keyframes blink { to { visibility:hidden; } }
+  .green { color:#25d366 } .yellow { color:#ffdd57 } .cyan { color:#5ad } .white { color:#eee }
+  .blink { animation: blink 1s steps(2, start) 6; } @keyframes blink { to { visibility:hidden; } }
   footer { padding:10px 12px; opacity:.6; font-size:12px;}
 </style>
 </head>
 <body>
   <header>
     <div>中國變速 × 業績儀表板</div>
-    <div class="stamp" id="updatedAt">更新中…</div>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="dateSelect"></select>
+      <span class="stamp" id="updatedAt">更新中…</span>
+    </div>
   </header>
 
   <div class="ticker-wrap"><div id="ticker" class="ticker"></div></div>
 
-  <div class="grid" id="board">
-    <div class="cell head">case 公司名稱</div>
-    <div class="cell head num">成交金額(總)</div>
-    <div class="cell head">業務</div>
-    <div class="cell head num">加賴數量</div>
-    <div class="cell head num">報價數量</div>
-    <div class="cell head num">製圖數量</div>
-    <div class="cell head num">成交率 / 單位成交金額</div>
+  <!-- 區塊 1：彙總 -->
+  <div class="section">
+    <h2>彙總（公司 × 業務）</h2>
+    <div class="wrap">
+      <div class="grid agg" id="aggGrid">
+        <div class="cell head">時間</div>
+        <div class="cell head">case 公司名稱</div>
+        <div class="cell head num">成交金額(總)</div>
+        <div class="cell head">業務</div>
+        <div class="cell head num">加賴數量</div>
+        <div class="cell head num">報價數量</div>
+        <div class="cell head num">製圖數量 / 成交率 / 單位成交金額</div>
+      </div>
+    </div>
   </div>
 
-  <footer>每 5 分鐘自動更新；滑鼠移到跑馬燈可暫停。</footer>
+  <!-- 區塊 2：原始訂單列 -->
+  <div class="section">
+    <h2>訂單明細（即時逐筆）</h2>
+    <div class="wrap">
+      <div class="grid raw" id="rawGrid">
+        <div class="cell head">時間</div>
+        <div class="cell head">公司</div>
+        <div class="cell head">業務</div>
+        <div class="cell head">狀態</div>
+        <div class="cell head">品項</div>
+        <div class="cell head num">金額</div>
+        <div class="cell head num">加賴</div>
+        <div class="cell head num">報價</div>
+        <div class="cell head num">製圖</div>
+      </div>
+    </div>
+  </div>
+
+  <footer>每 1 分鐘自動更新；滑鼠移到跑馬燈可暫停。</footer>
 
 <script>
-  const API = 'https://script.google.com/macros/s/AKfycbwb7mi8aUpMvWMRV-PaPjm-6rGh5gN77PlMmK26-0r0cC73Pa3iqLwu_xT9mapKWxFF/exec';   // ← 換成 Apps Script Web App URL
-  const REFRESH_MS = 1 * 60 * 1000; // 5 分鐘
+  const API = 'https://script.google.com/macros/s/AKfycbzCCaWZz1A5ITYdV-H7ZnSJebxHKIgSPRDnrUHh9z7JDSeb6TOltRRh6ACZijCawnn9/exec'; // ← 換成 Apps Script Web App /exec
+  const REFRESH_MS = 60 * 1000;
+
+  function buildURL() {
+    const sel = document.getElementById('dateSelect');
+    const d = sel && sel.value ? sel.value : '';
+    return d ? `${API}?date=${encodeURIComponent(d)}` : API;
+  }
 
   async function fetchData() {
-    const res = await fetch(API, { cache: 'no-store' });
+    const res = await fetch(buildURL(), { cache: 'no-store' });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
     return res.json();
   }
 
   function money(n){ return (n||0).toLocaleString('zh-TW', {maximumFractionDigits:0}); }
   function pct(x){ return (x*100).toFixed(1) + '%'; }
 
-  function renderBoard(cards){
-    const grid = document.getElementById('board');
-    // 先刪舊資料列
-    [...grid.querySelectorAll('.row')].forEach(el => el.remove());
+  // 一次性建立日期選單
+  function ensureDateOptions(dates, selected) {
+    const sel = document.getElementById('dateSelect');
+    if (!sel.dataset.ready) {
+      sel.innerHTML = dates.map(d => `<option value="${d}">${d}</option>`).join('');
+      sel.dataset.ready = '1';
+      sel.addEventListener('change', refresh); // 選單改變就刷新
+    }
+    if (selected) sel.value = selected;
+  }
 
+  // 區塊 1：彙總（不會越抓越長；每次重繪資料列，長度=組合數）
+  function renderAgg(cards){
+    const grid = document.getElementById('aggGrid');
+    // 清除舊資料列（保留 .head）
+    [...grid.querySelectorAll('.data')].forEach(el => el.remove());
+    // 重新畫（長度固定，不會往下延伸）
     cards.forEach(c => {
-      const row = document.createElement('div'); row.className = 'row';
       const cells = [
-        [`${c.company}`, 'cell white'],
-        [money(c.total_amount), 'cell num green'],
-        [c.sales_rep, 'cell white'],
-        [money(c.line_adds), 'cell num green'],
-        [money(c.quotes), 'cell num yellow'],
-        [money(c.drawings), 'cell num cyan'],
-        [`${pct(c.win_rate)} / ${money(c.avg_win_amount)}`, 'cell num white']
+        [c.last_time || '', 'cell data white'],
+        [`${c.company}`, 'cell data white'],
+        [money(c.total_amount), 'cell data num green'],
+        [c.sales_rep, 'cell data white'],
+        [money(c.line_adds), 'cell data num green'],
+        [money(c.quotes), 'cell data num yellow'],
+        [`${money(c.drawings)} / ${pct(c.win_rate)} / ${money(c.avg_win_amount)}`, 'cell data num white']
       ];
+      const frag = document.createDocumentFragment(); // 批次插入效能更好（MDN：DocumentFragment） 
       cells.forEach(([txt, cls]) => {
         const d = document.createElement('div');
         d.className = cls;
         d.textContent = txt;
-        grid.appendChild(d);
+        frag.appendChild(d);
       });
+      grid.appendChild(frag);
     });
   }
 
-  // 成交跑馬燈（只顯示最近 N 筆）
+  // 區塊 2：原始訂單列（忠實呈現逐筆；可捲動）
+  function renderRaw(orders){
+    const grid = document.getElementById('rawGrid');
+    [...grid.querySelectorAll('.data')].forEach(el => el.remove());
+    orders.forEach(o => {
+      const cells = [
+        [`${o.time || ''}`, 'cell data white'],
+        [o.company, 'cell data white'],
+        [o.sales_rep, 'cell data white'],
+        [o.status, 'cell data white'],
+        [o.item, 'cell data white'],
+        [money(o.amount), 'cell data num green'],
+        [money(o.line_adds), 'cell data num green'],
+        [money(o.quotes), 'cell data num yellow'],
+        [money(o.drawings), 'cell data num cyan'],
+      ];
+      const frag = document.createDocumentFragment();
+      cells.forEach(([txt, cls]) => {
+        const d = document.createElement('div');
+        d.className = cls;
+        d.textContent = txt;
+        frag.appendChild(d);
+      });
+      grid.appendChild(frag);
+    });
+  }
+
+  // 跑馬燈（只顯示最近 25 筆）
   function renderTicker(tickers){
     const el = document.getElementById('ticker');
     const latest = tickers.slice(-25).reverse();
-    el.innerHTML = latest.map(t => 
+    el.innerHTML = latest.map(t =>
       `<span class="tick-item">賀！業務${t.sales} 成交 ${t.item} ，公司 ${t.company} ，成交金額 ${Number(t.amount||0).toLocaleString('zh-TW')} 元</span>`
     ).join('  •  ');
-    // 讓剛成交的項目閃爍一下
     el.classList.remove('blink'); void el.offsetWidth; el.classList.add('blink');
   }
 
   async function refresh(){
     try{
       const data = await fetchData();
-      document.getElementById('updatedAt').textContent = `更新時間：${new Date(data.updatedAt).toLocaleString('zh-TW')}`;
-      renderBoard(data.cards || []);
+      ensureDateOptions(data.dates || [], data.selectedDate);
+      document.getElementById('updatedAt').textContent =
+        `更新時間：${new Date(data.updatedAt).toLocaleString('zh-TW')}`;
+      renderAgg(data.cards || []);
+      renderRaw(data.orders || []);
       renderTicker(data.tickers || []);
     }catch(e){
       document.getElementById('updatedAt').textContent = '更新失敗，等待下次輪詢…';
