@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="zh-TW">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>中國變速 × 業績儀表板</title>
+<style>
+  body { background:#000; color:#ddd; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; }
+  header { padding:8px 12px; border-bottom:1px solid #222; display:flex; justify-content:space-between; align-items:center;}
+  .stamp { font-size:12px; opacity:.7 }
+  /* 跑馬燈（CSS Animation，非 <marquee>） */
+  .ticker-wrap { overflow:hidden; white-space:nowrap; border-top:1px solid #222; border-bottom:1px solid #222; }
+  .ticker { display:inline-block; padding:8px 0; animation: ticker 30s linear infinite; }
+  .ticker:hover { animation-play-state: paused; }
+  @keyframes ticker { 0% { transform:translateX(100%);} 100% { transform:translateX(-100%);} }
+  .tick-item { margin-right:48px; color:#0f0 }
+  /* 股市板風格格子 */
+  .grid { display:grid; grid-template-columns: 240px 140px 120px 120px 120px 120px 160px; gap:6px; padding:12px;}
+  .cell { padding:8px 10px; background:#101010; border:1px solid #181818; border-radius:6px; }
+  .head { background:#151515; color:#aaa; font-weight:700; }
+  .num { text-align:right; font-variant-numeric: tabular-nums; }
+  .green { color:#25d366 } .yellow { color:#ffdd57 } .cyan { color:#5ad } .red { color:#ff5a5a } .white { color:#eee }
+  .blink { animation: blink 1s steps(2, start) 6; }
+  @keyframes blink { to { visibility:hidden; } }
+  footer { padding:10px 12px; opacity:.6; font-size:12px;}
+</style>
+</head>
+<body>
+  <header>
+    <div>中國變速 × 業績儀表板</div>
+    <div class="stamp" id="updatedAt">更新中…</div>
+  </header>
+
+  <div class="ticker-wrap"><div id="ticker" class="ticker"></div></div>
+
+  <div class="grid" id="board">
+    <div class="cell head">case 公司名稱</div>
+    <div class="cell head num">成交金額(總)</div>
+    <div class="cell head">業務</div>
+    <div class="cell head num">加賴數量</div>
+    <div class="cell head num">報價數量</div>
+    <div class="cell head num">製圖數量</div>
+    <div class="cell head num">成交率 / 單位成交金額</div>
+  </div>
+
+  <footer>每 5 分鐘自動更新；滑鼠移到跑馬燈可暫停。</footer>
+
+<script>
+  const API = 'https://script.google.com/macros/s/AKfycbwzgdfaJQneEFRwA2NfNDeS__vmDt7dYj63AeCQmUlU0tD90jhFY177sdzWEljDB57g7w/exec';   // ← 換成 Apps Script Web App URL
+  const REFRESH_MS = 5 * 60 * 1000; // 5 分鐘
+
+  async function fetchData() {
+    const res = await fetch(API, { cache: 'no-store' });
+    return res.json();
+  }
+
+  function money(n){ return (n||0).toLocaleString('zh-TW', {maximumFractionDigits:0}); }
+  function pct(x){ return (x*100).toFixed(1) + '%'; }
+
+  function renderBoard(cards){
+    const grid = document.getElementById('board');
+    // 先刪舊資料列
+    [...grid.querySelectorAll('.row')].forEach(el => el.remove());
+
+    cards.forEach(c => {
+      const row = document.createElement('div'); row.className = 'row';
+      const cells = [
+        [`${c.company}`, 'cell white'],
+        [money(c.total_amount), 'cell num green'],
+        [c.sales_rep, 'cell white'],
+        [money(c.line_adds), 'cell num green'],
+        [money(c.quotes), 'cell num yellow'],
+        [money(c.drawings), 'cell num cyan'],
+        [`${pct(c.win_rate)} / ${money(c.avg_win_amount)}`, 'cell num white']
+      ];
+      cells.forEach(([txt, cls]) => {
+        const d = document.createElement('div');
+        d.className = cls;
+        d.textContent = txt;
+        grid.appendChild(d);
+      });
+    });
+  }
+
+  // 成交跑馬燈（只顯示最近 N 筆）
+  function renderTicker(tickers){
+    const el = document.getElementById('ticker');
+    const latest = tickers.slice(-25).reverse();
+    el.innerHTML = latest.map(t => 
+      `<span class="tick-item">賀！業務${t.sales} 成交 ${t.item} ，公司 ${t.company} ，成交金額 ${Number(t.amount||0).toLocaleString('zh-TW')} 元</span>`
+    ).join('  •  ');
+    // 讓剛成交的項目閃爍一下
+    el.classList.remove('blink'); void el.offsetWidth; el.classList.add('blink');
+  }
+
+  async function refresh(){
+    try{
+      const data = await fetchData();
+      document.getElementById('updatedAt').textContent = `更新時間：${new Date(data.updatedAt).toLocaleString('zh-TW')}`;
+      renderBoard(data.cards || []);
+      renderTicker(data.tickers || []);
+    }catch(e){
+      document.getElementById('updatedAt').textContent = '更新失敗，等待下次輪詢…';
+      console.error(e);
+    }
+  }
+
+  refresh();
+  setInterval(refresh, REFRESH_MS);
+</script>
+</body>
+</html>
