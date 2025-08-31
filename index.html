@@ -47,7 +47,7 @@
 
 <script>
   const API = 'https://script.google.com/macros/s/AKfycbwzgdfaJQneEFRwA2NfNDeS__vmDt7dYj63AeCQmUlU0tD90jhFY177sdzWEljDB57g7w/exec';   // ← 換成 Apps Script Web App URL
-  const REFRESH_MS = 5 * 60 * 1000; // 5 分鐘
+  const REFRESH_MS = 1 * 60 * 1000; // 5 分鐘
 
   async function fetchData() {
     const res = await fetch(API, { cache: 'no-store' });
